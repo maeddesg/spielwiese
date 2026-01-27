@@ -67,9 +67,32 @@ function ollama_bench
         set model_vram_mb "N/A"
     end
 
+    # GPU-Clock-Datei ermitteln
+    set sclk_file "$card_path/pp_dpm_sclk"
+
+    # Speicher-Dateien ermitteln
+    set vram_used_file "$card_path/mem_info_vram_used"
+    set vram_total_file "$card_path/mem_info_vram_total"
+    set gtt_used_file "$card_path/mem_info_gtt_used"
+    set gtt_total_file "$card_path/mem_info_gtt_total"
+
+    # VRAM/GTT Total einmalig lesen
+    if test -f "$vram_total_file"
+        set vram_total_raw (cat "$vram_total_file")
+        set vram_total_mb (math -s0 "$vram_total_raw / 1048576")
+    else
+        set vram_total_mb "N/A"
+    end
+    if test -f "$gtt_total_file"
+        set gtt_total_raw (cat "$gtt_total_file")
+        set gtt_total_mb (math -s0 "$gtt_total_raw / 1048576")
+    else
+        set gtt_total_mb "N/A"
+    end
+
     # CSV-Header schreiben falls neu
     if not test -f "$csv_file"
-        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms" > "$csv_file"
+        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb" > "$csv_file"
     end
 
     echo "==============================================="
@@ -80,10 +103,12 @@ function ollama_bench
     echo "Modell:  $model"
     echo "Größe:   $model_size"
     echo "Offload: $model_processor"
+    echo "VRAM:    $vram_total_mb MB total"
+    echo "GTT:     $gtt_total_mb MB total"
     echo "CSV:     $csv_file"
-    echo "-----------------------------------------------"
-    echo "Zeit     | t/s   | VRAM    | Power | Temp"
-    echo "-----------------------------------------------"
+    echo "---------------------------------------------------------------"
+    echo "Zeit     | t/s   | VRAM    | Power | Temp  | Clock   | GTT"
+    echo "---------------------------------------------------------------"
 
     # Power-Datei ermitteln
     set hwmon_files $card_path/hwmon/hwmon*/power1_average
@@ -108,11 +133,21 @@ function ollama_bench
         # Temp-Datei für Power-Sampling
         set power_samples_file (mktemp)
 
-        # Power-Sampler im Hintergrund starten (alle 100ms)
+        # Sample-Dateien
+        set clock_samples_file (mktemp)
+        set gtt_samples_file (mktemp)
+
+        # Power-, Clock- und GTT-Sampler im Hintergrund starten (alle 100ms)
         if test -f "$power_file"
             fish -c "
                 while true
                     cat '$power_file' >> '$power_samples_file'
+                    if test -f '$sclk_file'
+                        grep '\*' '$sclk_file' | string match -r '\d+(?=Mhz)' >> '$clock_samples_file'
+                    end
+                    if test -f '$gtt_used_file'
+                        cat '$gtt_used_file' >> '$gtt_samples_file'
+                    end
                     sleep 0.1
                 end
             " &
@@ -159,17 +194,40 @@ function ollama_bench
                 set temp "N/A"
             end
 
+            # GPU-Clock - Maximum aus Samples
+            if test -f "$clock_samples_file"; and test -s "$clock_samples_file"
+                set gpu_clock (sort -n "$clock_samples_file" | tail -n 1)
+            else
+                set gpu_clock "N/A"
+            end
+
+            # VRAM tatsächlich belegt (Snapshot nach Inference)
+            if test -f "$vram_used_file"
+                set vram_used_raw (cat "$vram_used_file")
+                set vram_used_mb (math -s0 "$vram_used_raw / 1048576")
+            else
+                set vram_used_mb "N/A"
+            end
+
+            # GTT - Maximum aus Samples (Spillover in System-RAM)
+            if test -f "$gtt_samples_file"; and test -s "$gtt_samples_file"
+                set gtt_max (sort -n "$gtt_samples_file" | tail -n 1)
+                set gtt_used_mb (math -s0 "$gtt_max / 1048576")
+            else
+                set gtt_used_mb "N/A"
+            end
+
             # Ausgabe
-            echo (date +"%H:%M:%S")" | $ts | $vram MB | $power W | $temp°C"
+            echo (date +"%H:%M:%S")" | $ts | $vram_used_mb MB | $power W | $temp°C | $gpu_clock MHz | GTT $gtt_used_mb MB"
 
             # CSV speichern
-            echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft" >> "$csv_file"
+            echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft","$gpu_clock","$vram_used_mb","$gtt_used_mb" >> "$csv_file"
         else
             echo (date +"%H:%M:%S")" | API Busy..."
         end
 
-        # Temp-Datei aufräumen
-        rm -f "$power_samples_file"
+        # Temp-Dateien aufräumen
+        rm -f "$power_samples_file" "$clock_samples_file" "$gtt_samples_file"
 
         sleep 1
     end
