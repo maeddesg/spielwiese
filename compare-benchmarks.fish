@@ -15,9 +15,11 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
             if ($13+0 > 0) { vram_real+=$13; vram_real_n++ }
             if ($14+0 > 0) { gtt+=$14; gtt_n++ }
             if ($15+0 > 0) { eff+=$15; eff_n++ }
+            if ($16+0 > 0) { bl_vram+=$16; bl_n++ }
+            if ($17+0 > 0) { bl_gtt+=$17; bl_gtt_n++ }
             n++
         } END {
-            if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f|%.3f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0), (eff_n>0 ? eff/eff_n : (power/n>0 ? ts/n/(power/n) : 0))
+            if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f|%.3f|%.0f|%.0f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0), (eff_n>0 ? eff/eff_n : (power/n>0 ? ts/n/(power/n) : 0)), (bl_n>0 ? bl_vram/bl_n : 0), (bl_gtt_n>0 ? bl_gtt/bl_gtt_n : 0)
         }')
 
         set ts (echo $stats | cut -d'|' -f1)
@@ -30,12 +32,17 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
         set vram_real (echo $stats | cut -d'|' -f8)
         set gtt (echo $stats | cut -d'|' -f9)
         set efficiency (echo $stats | cut -d'|' -f10)
+        set bl_vram (echo $stats | cut -d'|' -f11)
+        set bl_gtt (echo $stats | cut -d'|' -f12)
 
         echo "=== $backend ($count Messungen) ==="
         echo "  Tokens/s:   $ts t/s"
         echo "  VRAM (est): $vram MB (Modell-Anteil)"
         if test "$vram_real" != "0"
             echo "  VRAM (hw):  $vram_real MB (tatsächlich belegt)"
+        end
+        if test "$bl_vram" != "0"
+            echo "  VRAM Base:  $bl_vram MB (Ø Baseline ohne Modell)"
         end
         echo "  Power:      $power W"
         echo "  Temp:       $temp °C"
@@ -45,6 +52,9 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
         end
         if test "$gtt" != "0"
             echo "  GTT:        $gtt MB (Ø System-RAM Spillover)"
+        end
+        if test "$bl_gtt" != "0"
+            echo "  GTT Base:   $bl_gtt MB (Ø Baseline ohne Modell)"
         end
         echo "  Effizienz:  $efficiency t/J (Tokens pro Joule)"
         echo

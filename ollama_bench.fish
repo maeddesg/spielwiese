@@ -35,10 +35,59 @@ function ollama_bench
 
     set csv_file "benchmark_$backend.csv"
 
-    # Modell laden falls nicht aktiv
+    # Speicher-Dateien ermitteln (früh, für Baseline)
+    set vram_used_file "$card_path/mem_info_vram_used"
+    set gtt_used_file "$card_path/mem_info_gtt_used"
+
+    # Modell stoppen für saubere VRAM-Ausgangslage
+    echo "Stoppe Modell $model für saubere Baseline..."
+    ollama stop "$model" 2>/dev/null
+    sleep 2
+
+    # VRAM/GTT Baseline messen (ohne Modell = Firefox, Compositor, etc.)
+    if test -f "$vram_used_file"
+        set baseline_vram_raw (cat "$vram_used_file")
+        set baseline_vram_mb (math -s0 "$baseline_vram_raw / 1048576")
+    else
+        set baseline_vram_mb "N/A"
+    end
+    if test -f "$gtt_used_file"
+        set baseline_gtt_raw (cat "$gtt_used_file")
+        set baseline_gtt_mb (math -s0 "$baseline_gtt_raw / 1048576")
+    else
+        set baseline_gtt_mb "N/A"
+    end
+
+    # Modell neu laden
     echo "Lade Modell $model..."
     curl -s -X POST http://localhost:11434/api/generate \
         -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" >/dev/null
+
+    # VRAM/GTT nach Laden messen
+    if test -f "$vram_used_file"
+        set loaded_vram_raw (cat "$vram_used_file")
+        set loaded_vram_mb (math -s0 "$loaded_vram_raw / 1048576")
+    else
+        set loaded_vram_mb "N/A"
+    end
+    if test -f "$gtt_used_file"
+        set loaded_gtt_raw (cat "$gtt_used_file")
+        set loaded_gtt_mb (math -s0 "$loaded_gtt_raw / 1048576")
+    else
+        set loaded_gtt_mb "N/A"
+    end
+
+    # Delta berechnen (was das Modell tatsächlich belegt)
+    if test "$baseline_vram_mb" != "N/A"; and test "$loaded_vram_mb" != "N/A"
+        set delta_vram_mb (math -s0 "$loaded_vram_mb - $baseline_vram_mb")
+    else
+        set delta_vram_mb "N/A"
+    end
+    if test "$baseline_gtt_mb" != "N/A"; and test "$loaded_gtt_mb" != "N/A"
+        set delta_gtt_mb (math -s0 "$loaded_gtt_mb - $baseline_gtt_mb")
+    else
+        set delta_gtt_mb "N/A"
+    end
 
     # Modell-Info holen (awk für korrekte Spalten-Trennung)
     set model_info (ollama ps 2>/dev/null | grep "$model")
@@ -70,10 +119,8 @@ function ollama_bench
     # GPU-Clock-Datei ermitteln
     set sclk_file "$card_path/pp_dpm_sclk"
 
-    # Speicher-Dateien ermitteln
-    set vram_used_file "$card_path/mem_info_vram_used"
+    # Speicher-Dateien ermitteln (Total)
     set vram_total_file "$card_path/mem_info_vram_total"
-    set gtt_used_file "$card_path/mem_info_gtt_used"
     set gtt_total_file "$card_path/mem_info_gtt_total"
 
     # VRAM/GTT Total einmalig lesen
@@ -92,7 +139,7 @@ function ollama_bench
 
     # CSV-Header schreiben falls neu
     if not test -f "$csv_file"
-        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb,efficiency_tpj" > "$csv_file"
+        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb,efficiency_tpj,vram_baseline_mb,gtt_baseline_mb" > "$csv_file"
     end
 
     echo "==============================================="
@@ -103,8 +150,8 @@ function ollama_bench
     echo "Modell:  $model"
     echo "Größe:   $model_size"
     echo "Offload: $model_processor"
-    echo "VRAM:    $vram_total_mb MB total"
-    echo "GTT:     $gtt_total_mb MB total"
+    echo "VRAM:    $vram_total_mb MB total | Baseline: $baseline_vram_mb MB | Modell: +$delta_vram_mb MB | Geladen: $loaded_vram_mb MB"
+    echo "GTT:     $gtt_total_mb MB total | Baseline: $baseline_gtt_mb MB | Modell: +$delta_gtt_mb MB | Geladen: $loaded_gtt_mb MB"
     echo "CSV:     $csv_file"
     echo "------------------------------------------------------------------------"
     echo "Zeit     | t/s   | VRAM    | Power | Temp  | Clock   | GTT     | t/J"
@@ -228,7 +275,7 @@ function ollama_bench
             echo (date +"%H:%M:%S")" | $ts | $vram_used_mb MB | $power W | $temp°C | $gpu_clock MHz | GTT $gtt_used_mb MB | $efficiency"
 
             # CSV speichern
-            echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft","$gpu_clock","$vram_used_mb","$gtt_used_mb","$efficiency" >> "$csv_file"
+            echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft","$gpu_clock","$vram_used_mb","$gtt_used_mb","$efficiency","$baseline_vram_mb","$baseline_gtt_mb" >> "$csv_file"
         else
             echo (date +"%H:%M:%S")" | API Busy..."
         end
