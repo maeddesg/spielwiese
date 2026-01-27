@@ -17,9 +17,11 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
             if ($15+0 > 0) { eff+=$15; eff_n++ }
             if ($16+0 > 0) { bl_vram+=$16; bl_n++ }
             if ($17+0 > 0) { bl_gtt+=$17; bl_gtt_n++ }
+            if ($18+0 > 0) { gpu_b+=$18; gpu_b_n++ }
+            if ($19+0 > 0) { mem_b+=$19; mem_b_n++ }
             n++
         } END {
-            if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f|%.3f|%.0f|%.0f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0), (eff_n>0 ? eff/eff_n : (power/n>0 ? ts/n/(power/n) : 0)), (bl_n>0 ? bl_vram/bl_n : 0), (bl_gtt_n>0 ? bl_gtt/bl_gtt_n : 0)
+            if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f|%.3f|%.0f|%.0f|%.0f|%.0f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0), (eff_n>0 ? eff/eff_n : (power/n>0 ? ts/n/(power/n) : 0)), (bl_n>0 ? bl_vram/bl_n : 0), (bl_gtt_n>0 ? bl_gtt/bl_gtt_n : 0), (gpu_b_n>0 ? gpu_b/gpu_b_n : 0), (mem_b_n>0 ? mem_b/mem_b_n : 0)
         }')
 
         set ts (echo $stats | cut -d'|' -f1)
@@ -34,6 +36,8 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
         set efficiency (echo $stats | cut -d'|' -f10)
         set bl_vram (echo $stats | cut -d'|' -f11)
         set bl_gtt (echo $stats | cut -d'|' -f12)
+        set gpu_busy (echo $stats | cut -d'|' -f13)
+        set mem_busy (echo $stats | cut -d'|' -f14)
 
         echo "=== $backend ($count Messungen) ==="
         echo "  Tokens/s:   $ts t/s"
@@ -57,6 +61,12 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
             echo "  GTT Base:   $bl_gtt MB (Ø Baseline ohne Modell)"
         end
         echo "  Effizienz:  $efficiency t/J (Tokens pro Joule)"
+        if test "$gpu_busy" != "0"
+            echo "  GPU-Busy:   $gpu_busy% (Ø Shader-Auslastung)"
+        end
+        if test "$mem_busy" != "0"
+            echo "  MEM-Busy:   $mem_busy% (Ø Speicherbus-Auslastung)"
+        end
         echo
     end
 end
