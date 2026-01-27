@@ -71,7 +71,7 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
         if test "$bl_gtt" != "0"
             echo "  GTT Base:   $bl_gtt MB (Ø Baseline ohne Modell)"
         end
-        echo "  Effizienz:  $efficiency t/J (Tokens pro Joule)"
+        echo "  Effizienz:  $efficiency t/W (Tokens pro Watt)"
         if test "$gpu_busy" != "0"
             echo "  GPU-Busy:   $gpu_busy% (Ø Shader-Auslastung)"
         end

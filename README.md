@@ -19,7 +19,7 @@ Metrics sampled per inference run:
 | **TTFT** | Ollama API | Time to First Token (ms) |
 | **GPU-Clock** | `pp_dpm_sclk` | Shader clock during inference (peak, MHz) |
 | **GTT** | `mem_info_gtt_used` | System-RAM spillover (peak, MB) |
-| **Effizienz** | berechnet | Tokens pro Joule (t/s / W) |
+| **Effizienz** | berechnet | Tokens pro Watt (t/s / W) |
 | **GPU-Busy** | `gpu_busy_percent` | GPU-Auslastung (Durchschnitt, %) |
 | **MEM-Busy** | `mem_busy_percent` | Speicherbus-Auslastung (Durchschnitt, %) |
 
@@ -36,7 +36,7 @@ The backend (ROCm/Vulkan/CPU) is detected automatically via installed `pacman` p
 ```
 timestamp, ollama_version, backend, model, model_size, gpu_offload,
 tokens_per_sec, vram_mb, power_w, temp_c, ttft_ms, gpu_clock_mhz,
-vram_used_mb, gtt_used_mb, efficiency_tpj, vram_baseline_mb,
+vram_used_mb, gtt_used_mb, efficiency_tpw, vram_baseline_mb,
 gtt_baseline_mb, gpu_busy_pct, mem_busy_pct
 ```
 
@@ -53,7 +53,7 @@ Compares benchmark results from Vulkan and ROCm, showing averages for all metric
 - **GPU-Busy hoch (>90%), MEM-Busy moderat**: GPU wird voll ausgelastet (compute-bound)
 - **GPU-Busy niedrig, MEM-Busy hoch**: Speicherbandbreite ist der Flaschenhals (memory-bound)
 - **Hoher GTT-Wert**: Modell wurde teilweise in System-RAM ausgelagert -- Performance leidet
-- **Effizienz (t/J)**: Höher = besser. Zeigt wie effizient das Backend die GPU nutzt
+- **Effizienz (t/W)**: Höher = besser. Zeigt wie effizient das Backend die GPU nutzt
 
 ## Requirements
 

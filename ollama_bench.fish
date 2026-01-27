@@ -143,7 +143,7 @@ function ollama_bench
 
     # CSV-Header schreiben falls neu
     if not test -f "$csv_file"
-        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb,efficiency_tpj,vram_baseline_mb,gtt_baseline_mb,gpu_busy_pct,mem_busy_pct,warmup" > "$csv_file"
+        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb,efficiency_tpw,vram_baseline_mb,gtt_baseline_mb,gpu_busy_pct,mem_busy_pct,warmup" > "$csv_file"
     end
 
     echo "==============================================="
@@ -158,7 +158,7 @@ function ollama_bench
     echo "GTT:     $gtt_total_mb MB total | Baseline: $baseline_gtt_mb MB | Modell: +$delta_gtt_mb MB | Geladen: $loaded_gtt_mb MB"
     echo "CSV:     $csv_file"
     echo "--------------------------------------------------------------------------------------------------------"
-    echo "Zeit     | t/s   | VRAM    | Power | Temp  | Clock   | GTT     | t/J   | GPU%  | MEM%  |"
+    echo "Zeit     | t/s   | VRAM    | Power | Temp  | Clock   | GTT     | t/W   | GPU%  | MEM%  |"
     echo "--------------------------------------------------------------------------------------------------------"
 
     # Warmup-Zähler (erster Durchlauf = Warmup)
@@ -286,7 +286,7 @@ function ollama_bench
                 set gtt_used_mb "N/A"
             end
 
-            # Effizienz: Tokens pro Joule (t/s / W)
+            # Effizienz: Tokens pro Watt (t/s / W)
             if test "$power" != "N/A"; and test "$power" != "0"
                 set efficiency (math -s3 "$ts / $power")
             else
