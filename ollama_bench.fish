@@ -143,7 +143,7 @@ function ollama_bench
 
     # CSV-Header schreiben falls neu
     if not test -f "$csv_file"
-        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb,efficiency_tpw,vram_baseline_mb,gtt_baseline_mb,gpu_busy_pct,mem_busy_pct,warmup" > "$csv_file"
+        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb,efficiency_tpw,vram_baseline_mb,gtt_baseline_mb,gpu_busy_pct,mem_busy_pct,warmup,prompt_tokens_per_sec" > "$csv_file"
     end
 
     echo "==============================================="
@@ -157,9 +157,9 @@ function ollama_bench
     echo "VRAM:    $vram_total_mb MB total | Baseline: $baseline_vram_mb MB | Modell: +$delta_vram_mb MB | Geladen: $loaded_vram_mb MB"
     echo "GTT:     $gtt_total_mb MB total | Baseline: $baseline_gtt_mb MB | Modell: +$delta_gtt_mb MB | Geladen: $loaded_gtt_mb MB"
     echo "CSV:     $csv_file"
-    echo "--------------------------------------------------------------------------------------------------------"
-    echo "Zeit     | t/s   | VRAM    | Power | Temp  | Clock   | GTT     | t/W   | GPU%  | MEM%  |"
-    echo "--------------------------------------------------------------------------------------------------------"
+    echo "-------------------------------------------------------------------------------------------------------------------"
+    echo "Zeit     | Gen t/s | Prompt t/s | VRAM    | Power | Temp  | Clock   | GTT     | t/W   | GPU%  | MEM%  |"
+    echo "-------------------------------------------------------------------------------------------------------------------"
 
     # Warmup-Zähler (erster Durchlauf = Warmup)
     set run_count 0
@@ -235,6 +235,7 @@ function ollama_bench
 
         set eval_count (echo "$response" | jq -r '.eval_count // empty' 2>/dev/null)
         set eval_duration (echo "$response" | jq -r '.eval_duration // empty' 2>/dev/null)
+        set prompt_eval_count (echo "$response" | jq -r '.prompt_eval_count // empty' 2>/dev/null)
         set prompt_eval_duration (echo "$response" | jq -r '.prompt_eval_duration // empty' 2>/dev/null)
 
         if test -n "$eval_count"; and test "$eval_count" != "null"; and test "$eval_count" != "0"
@@ -243,6 +244,13 @@ function ollama_bench
 
             # TTFT in ms
             set ttft (math -s1 "$prompt_eval_duration / 1000000")
+
+            # Prompt-Verarbeitung t/s
+            if test -n "$prompt_eval_count"; and test "$prompt_eval_count" != "null"; and test "$prompt_eval_count" != "0"
+                set prompt_ts (math -s2 "$prompt_eval_count / ($prompt_eval_duration / 1000000000)")
+            else
+                set prompt_ts "N/A"
+            end
 
             # VRAM (berechneter Modell-VRAM)
             set vram "$model_vram_mb"
@@ -315,10 +323,10 @@ function ollama_bench
             end
 
             # Ausgabe
-            echo (date +"%H:%M:%S")" | $ts | $vram_used_mb MB | $power W | $temp°C | $gpu_clock MHz | GTT $gtt_used_mb MB | $efficiency | $gpu_busy_avg% | $mem_busy_avg%$warmup_label"
+            echo (date +"%H:%M:%S")" | $ts | $prompt_ts | $vram_used_mb MB | $power W | $temp°C | $gpu_clock MHz | GTT $gtt_used_mb MB | $efficiency | $gpu_busy_avg% | $mem_busy_avg%$warmup_label"
 
             # CSV speichern
-            echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft","$gpu_clock","$vram_used_mb","$gtt_used_mb","$efficiency","$baseline_vram_mb","$baseline_gtt_mb","$gpu_busy_avg","$mem_busy_avg","$is_warmup" >> "$csv_file"
+            echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft","$gpu_clock","$vram_used_mb","$gtt_used_mb","$efficiency","$baseline_vram_mb","$baseline_gtt_mb","$gpu_busy_avg","$mem_busy_avg","$is_warmup","$prompt_ts" >> "$csv_file"
         else
             echo (date +"%H:%M:%S")" | API Busy..."
         end

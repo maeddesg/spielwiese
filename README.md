@@ -12,7 +12,8 @@ Metrics sampled per inference run:
 
 | Metric | Source | Description |
 |--------|--------|-------------|
-| **Tokens/s** | Ollama API | Generation speed |
+| **Gen t/s** | Ollama API | Generation speed (Token-Ausgabe) |
+| **Prompt t/s** | Ollama API | Prompt evaluation speed (Token-Eingabe) |
 | **VRAM (hw)** | `mem_info_vram_used` | Actual VRAM usage from hardware |
 | **Power** | `power1_average` | GPU power consumption (peak, Watts) |
 | **Temperature** | `temp1_input` | GPU temperature |
@@ -37,7 +38,8 @@ The backend (ROCm/Vulkan/CPU) is detected automatically via installed `pacman` p
 timestamp, ollama_version, backend, model, model_size, gpu_offload,
 tokens_per_sec, vram_mb, power_w, temp_c, ttft_ms, gpu_clock_mhz,
 vram_used_mb, gtt_used_mb, efficiency_tpw, vram_baseline_mb,
-gtt_baseline_mb, gpu_busy_pct, mem_busy_pct
+gtt_baseline_mb, gpu_busy_pct, mem_busy_pct, warmup,
+prompt_tokens_per_sec
 ```
 
 ### compare-benchmarks.fish
@@ -54,6 +56,7 @@ Compares benchmark results from Vulkan and ROCm, showing averages for all metric
 - **GPU-Busy niedrig, MEM-Busy hoch**: Speicherbandbreite ist der Flaschenhals (memory-bound)
 - **Hoher GTT-Wert**: Modell wurde teilweise in System-RAM ausgelagert -- Performance leidet
 - **Effizienz (t/W)**: Höher = besser. Zeigt wie effizient das Backend die GPU nutzt
+- **Prompt t/s >> Gen t/s**: Normal -- Prompt-Verarbeitung ist parallelisierbar, Generation ist sequenziell
 
 ## Requirements
 

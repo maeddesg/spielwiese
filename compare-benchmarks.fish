@@ -26,10 +26,11 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
                 if ($17+0 > 0) { bl_gtt+=$17; bl_gtt_n++ }
                 if ($18+0 > 0) { gpu_b+=$18; gpu_b_n++ }
                 if ($19+0 > 0) { mem_b+=$19; mem_b_n++ }
+                if ($21+0 > 0) { pts+=$21; pts_n++ }
                 n++
             }
         END {
-            if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f|%.3f|%.0f|%.0f|%.0f|%.0f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0), (eff_n>0 ? eff/eff_n : (power/n>0 ? ts/n/(power/n) : 0)), (bl_n>0 ? bl_vram/bl_n : 0), (bl_gtt_n>0 ? bl_gtt/bl_gtt_n : 0), (gpu_b_n>0 ? gpu_b/gpu_b_n : 0), (mem_b_n>0 ? mem_b/mem_b_n : 0)
+            if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f|%.3f|%.0f|%.0f|%.0f|%.0f|%.2f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0), (eff_n>0 ? eff/eff_n : (power/n>0 ? ts/n/(power/n) : 0)), (bl_n>0 ? bl_vram/bl_n : 0), (bl_gtt_n>0 ? bl_gtt/bl_gtt_n : 0), (gpu_b_n>0 ? gpu_b/gpu_b_n : 0), (mem_b_n>0 ? mem_b/mem_b_n : 0), (pts_n>0 ? pts/pts_n : 0)
         }')
 
         # Warmup-TTFT separat berechnen
@@ -49,9 +50,13 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
         set bl_gtt (echo $stats | cut -d'|' -f12)
         set gpu_busy (echo $stats | cut -d'|' -f13)
         set mem_busy (echo $stats | cut -d'|' -f14)
+        set prompt_ts (echo $stats | cut -d'|' -f15)
 
         echo "=== $backend ($count Messungen, $warmup_count Warmup übersprungen) ==="
-        echo "  Tokens/s:   $ts t/s"
+        echo "  Gen t/s:    $ts t/s (Generierung)"
+        if test "$prompt_ts" != "0.00"; and test "$prompt_ts" != "0"
+            echo "  Prompt t/s: $prompt_ts t/s (Prompt-Verarbeitung)"
+        end
         echo "  VRAM (est): $vram MB (Modell-Anteil)"
         if test "$vram_real" != "0"
             echo "  VRAM (hw):  $vram_real MB (tatsächlich belegt)"
