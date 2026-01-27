@@ -14,9 +14,10 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
             if ($12+0 > 0) { clk+=$12; clk_n++ }
             if ($13+0 > 0) { vram_real+=$13; vram_real_n++ }
             if ($14+0 > 0) { gtt+=$14; gtt_n++ }
+            if ($15+0 > 0) { eff+=$15; eff_n++ }
             n++
         } END {
-            if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0)
+            if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f|%.3f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0), (eff_n>0 ? eff/eff_n : (power/n>0 ? ts/n/(power/n) : 0))
         }')
 
         set ts (echo $stats | cut -d'|' -f1)
@@ -28,6 +29,7 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
         set gpu_clock (echo $stats | cut -d'|' -f7)
         set vram_real (echo $stats | cut -d'|' -f8)
         set gtt (echo $stats | cut -d'|' -f9)
+        set efficiency (echo $stats | cut -d'|' -f10)
 
         echo "=== $backend ($count Messungen) ==="
         echo "  Tokens/s:   $ts t/s"
@@ -44,6 +46,7 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
         if test "$gtt" != "0"
             echo "  GTT:        $gtt MB (Ø System-RAM Spillover)"
         end
+        echo "  Effizienz:  $efficiency t/J (Tokens pro Joule)"
         echo
     end
 end

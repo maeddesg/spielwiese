@@ -92,7 +92,7 @@ function ollama_bench
 
     # CSV-Header schreiben falls neu
     if not test -f "$csv_file"
-        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb" > "$csv_file"
+        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb,efficiency_tpj" > "$csv_file"
     end
 
     echo "==============================================="
@@ -106,9 +106,9 @@ function ollama_bench
     echo "VRAM:    $vram_total_mb MB total"
     echo "GTT:     $gtt_total_mb MB total"
     echo "CSV:     $csv_file"
-    echo "---------------------------------------------------------------"
-    echo "Zeit     | t/s   | VRAM    | Power | Temp  | Clock   | GTT"
-    echo "---------------------------------------------------------------"
+    echo "------------------------------------------------------------------------"
+    echo "Zeit     | t/s   | VRAM    | Power | Temp  | Clock   | GTT     | t/J"
+    echo "------------------------------------------------------------------------"
 
     # Power-Datei ermitteln
     set hwmon_files $card_path/hwmon/hwmon*/power1_average
@@ -217,11 +217,18 @@ function ollama_bench
                 set gtt_used_mb "N/A"
             end
 
+            # Effizienz: Tokens pro Joule (t/s / W)
+            if test "$power" != "N/A"; and test "$power" != "0"
+                set efficiency (math -s3 "$ts / $power")
+            else
+                set efficiency "N/A"
+            end
+
             # Ausgabe
-            echo (date +"%H:%M:%S")" | $ts | $vram_used_mb MB | $power W | $temp°C | $gpu_clock MHz | GTT $gtt_used_mb MB"
+            echo (date +"%H:%M:%S")" | $ts | $vram_used_mb MB | $power W | $temp°C | $gpu_clock MHz | GTT $gtt_used_mb MB | $efficiency"
 
             # CSV speichern
-            echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft","$gpu_clock","$vram_used_mb","$gtt_used_mb" >> "$csv_file"
+            echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft","$gpu_clock","$vram_used_mb","$gtt_used_mb","$efficiency" >> "$csv_file"
         else
             echo (date +"%H:%M:%S")" | API Busy..."
         end
