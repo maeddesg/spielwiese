@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# Vergleicht benchmark_vulkan.csv und benchmark_rocm.csv
+# Compares benchmark_vulkan.csv and benchmark_rocm.csv
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║               Benchmark Vergleich: Vulkan vs ROCm            ║"
+echo "║              Benchmark Comparison: Vulkan vs ROCm            ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 
@@ -10,11 +10,11 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
     if test -f $f
         set backend (string replace -r 'benchmark_(.+)\.csv' '$1' $f | string upper)
 
-        # Warmup-Zeilen zählen
+        # Count warmup rows
         set warmup_count (tail -n +2 $f | grep -v '^$' | awk -F',' '$20 == "true" {n++} END {printf "%d", n+0}')
 
-        # Statistik nur aus Nicht-Warmup-Zeilen (Spalte 20 != "true")
-        # Fallback: Zeilen ohne Spalte 20 werden einbezogen (alte Daten)
+        # Stats from non-warmup rows only (column 20 != "true")
+        # Fallback: rows without column 20 are included (legacy data)
         set stats (tail -n +2 $f | grep -v '^$' | awk -F',' '
             $20 != "true" {
                 ts+=$7; vram+=$8; power+=$9; temp+=$10; ttft+=$11;
@@ -33,7 +33,7 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
             if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f|%.3f|%.0f|%.0f|%.0f|%.0f|%.2f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0), (eff_n>0 ? eff/eff_n : (power/n>0 ? ts/n/(power/n) : 0)), (bl_n>0 ? bl_vram/bl_n : 0), (bl_gtt_n>0 ? bl_gtt/bl_gtt_n : 0), (gpu_b_n>0 ? gpu_b/gpu_b_n : 0), (mem_b_n>0 ? mem_b/mem_b_n : 0), (pts_n>0 ? pts/pts_n : 0)
         }')
 
-        # Warmup-TTFT separat berechnen
+        # Calculate warmup TTFT separately
         set warmup_ttft (tail -n +2 $f | grep -v '^$' | awk -F',' '$20 == "true" {ttft+=$11; n++} END {if(n>0) printf "%.1f", ttft/n; else printf "N/A"}')
 
         set ts (echo $stats | cut -d'|' -f1)
@@ -52,57 +52,57 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
         set mem_busy (echo $stats | cut -d'|' -f14)
         set prompt_ts (echo $stats | cut -d'|' -f15)
 
-        echo "=== $backend ($count Messungen, $warmup_count Warmup übersprungen) ==="
-        echo "  Gen t/s:    $ts t/s (Generierung)"
+        echo "=== $backend ($count runs, $warmup_count warmup skipped) ==="
+        echo "  Gen t/s:    $ts t/s (generation)"
         if test "$prompt_ts" != "0.00"; and test "$prompt_ts" != "0"
-            echo "  Prompt t/s: $prompt_ts t/s (Prompt-Verarbeitung)"
+            echo "  Prompt t/s: $prompt_ts t/s (prompt evaluation)"
         end
-        echo "  VRAM (est): $vram MB (Modell-Anteil)"
+        echo "  VRAM (est): $vram MB (model share)"
         if test "$vram_real" != "0"
-            echo "  VRAM (hw):  $vram_real MB (tatsächlich belegt)"
+            echo "  VRAM (hw):  $vram_real MB (actual usage)"
         end
         if test "$bl_vram" != "0"
-            echo "  VRAM Base:  $bl_vram MB (Ø Baseline ohne Modell)"
+            echo "  VRAM Base:  $bl_vram MB (avg baseline without model)"
         end
         echo "  Power:      $power W"
         echo "  Temp:       $temp °C"
-        echo "  TTFT:       $ttft ms (warm) | $warmup_ttft ms (kalt/Warmup)"
+        echo "  TTFT:       $ttft ms (warm) | $warmup_ttft ms (cold/warmup)"
         if test "$gpu_clock" != "0"
-            echo "  GPU-Clock:  $gpu_clock MHz (Ø max)"
+            echo "  GPU-Clock:  $gpu_clock MHz (avg peak)"
         end
         if test "$gtt" != "0"
-            echo "  GTT:        $gtt MB (Ø System-RAM Spillover)"
+            echo "  GTT:        $gtt MB (avg system RAM spillover)"
         end
         if test "$bl_gtt" != "0"
-            echo "  GTT Base:   $bl_gtt MB (Ø Baseline ohne Modell)"
+            echo "  GTT Base:   $bl_gtt MB (avg baseline without model)"
         end
-        echo "  Effizienz:  $efficiency t/W (Tokens pro Watt)"
+        echo "  Efficiency: $efficiency t/W (tokens per watt)"
         if test "$gpu_busy" != "0"
-            echo "  GPU-Busy:   $gpu_busy% (Ø Shader-Auslastung)"
+            echo "  GPU-Busy:   $gpu_busy% (avg shader utilization)"
         end
         if test "$mem_busy" != "0"
-            echo "  MEM-Busy:   $mem_busy% (Ø Speicherbus-Auslastung)"
+            echo "  MEM-Busy:   $mem_busy% (avg memory bus utilization)"
         end
         echo
     end
 end
 
-# Vergleich berechnen (ohne Warmup)
+# Calculate comparison (excluding warmup)
 set vulkan_ts (tail -n +2 benchmark_vulkan.csv 2>/dev/null | grep -v '^$' | awk -F',' '$20 != "true" {ts+=$7; n++} END {if(n>0) printf "%.2f", ts/n; else print "0"}')
 set rocm_ts (tail -n +2 benchmark_rocm.csv 2>/dev/null | grep -v '^$' | awk -F',' '$20 != "true" {ts+=$7; n++} END {if(n>0) printf "%.2f", ts/n; else print "0"}')
 
 if test "$vulkan_ts" = "0"; or test "$rocm_ts" = "0"
     echo "─────────────────────────────────────────────────────────────────"
-    echo "Vergleich nicht möglich (Daten für beide Backends nötig)"
+    echo "Comparison not possible (data for both backends required)"
 else
     set diff (echo "$vulkan_ts $rocm_ts" | awk '{printf "%.1f", (($1-$2)/$2)*100}')
 
     echo "─────────────────────────────────────────────────────────────────"
-    echo "(Warmup-Runs sind aus dem Vergleich ausgeschlossen)"
+    echo "(Warmup runs are excluded from comparison)"
     if test (echo "$vulkan_ts > $rocm_ts" | bc) -eq 1
-        echo "Vulkan ist $diff% schneller als ROCm"
+        echo "Vulkan is $diff% faster than ROCm"
     else
         set diff (echo "$rocm_ts $vulkan_ts" | awk '{printf "%.1f", (($1-$2)/$2)*100}')
-        echo "ROCm ist $diff% schneller als Vulkan"
+        echo "ROCm is $diff% faster than Vulkan"
     end
 end

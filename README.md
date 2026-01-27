@@ -12,19 +12,21 @@ Metrics sampled per inference run:
 
 | Metric | Source | Description |
 |--------|--------|-------------|
-| **Gen t/s** | Ollama API | Generation speed (Token-Ausgabe) |
-| **Prompt t/s** | Ollama API | Prompt evaluation speed (Token-Eingabe) |
+| **Gen t/s** | Ollama API | Generation speed (token output) |
+| **Prompt t/s** | Ollama API | Prompt evaluation speed (token input) |
 | **VRAM (hw)** | `mem_info_vram_used` | Actual VRAM usage from hardware |
-| **Power** | `power1_average` | GPU power consumption (peak, Watts) |
+| **Power** | `power1_average` | GPU power consumption (peak, watts) |
 | **Temperature** | `temp1_input` | GPU temperature |
-| **TTFT** | Ollama API | Time to First Token (ms) |
+| **TTFT** | Ollama API | Time to first token (ms) |
 | **GPU-Clock** | `pp_dpm_sclk` | Shader clock during inference (peak, MHz) |
-| **GTT** | `mem_info_gtt_used` | System-RAM spillover (peak, MB) |
-| **Effizienz** | berechnet | Tokens pro Watt (t/s / W) |
-| **GPU-Busy** | `gpu_busy_percent` | GPU-Auslastung (Durchschnitt, %) |
-| **MEM-Busy** | `mem_busy_percent` | Speicherbus-Auslastung (Durchschnitt, %) |
+| **GTT** | `mem_info_gtt_used` | System RAM spillover (peak, MB) |
+| **Efficiency** | calculated | Tokens per watt (t/s / W) |
+| **GPU-Busy** | `gpu_busy_percent` | GPU utilization (average, %) |
+| **MEM-Busy** | `mem_busy_percent` | Memory bus utilization (average, %) |
 
-Power, Clock, GTT, GPU-Busy und MEM-Busy werden alle 100ms im Hintergrund gesampled.
+Power, clock, GTT, GPU-Busy and MEM-Busy are sampled every 100ms in the background.
+
+The first run after model reload is marked as warmup and excluded from averages in the comparison script.
 
 The backend (ROCm/Vulkan/CPU) is detected automatically via installed `pacman` packages. Results are saved to `benchmark_<backend>.csv`.
 
@@ -32,7 +34,7 @@ The backend (ROCm/Vulkan/CPU) is detected automatically via installed `pacman` p
 ./ollama_bench.fish
 ```
 
-#### CSV-Spalten
+#### CSV Columns
 
 ```
 timestamp, ollama_version, backend, model, model_size, gpu_offload,
@@ -44,7 +46,7 @@ prompt_tokens_per_sec
 
 ### compare-benchmarks.fish
 
-Compares benchmark results from Vulkan and ROCm, showing averages for all metrics and the percentage speed difference.
+Compares benchmark results from Vulkan and ROCm, showing averages for all metrics and the percentage speed difference. Warmup runs are excluded from all averages and TTFT is shown separately for warm and cold starts.
 
 ```bash
 ./compare-benchmarks.fish
@@ -52,11 +54,11 @@ Compares benchmark results from Vulkan and ROCm, showing averages for all metric
 
 ## Interpretation
 
-- **GPU-Busy hoch (>90%), MEM-Busy moderat**: GPU wird voll ausgelastet (compute-bound)
-- **GPU-Busy niedrig, MEM-Busy hoch**: Speicherbandbreite ist der Flaschenhals (memory-bound)
-- **Hoher GTT-Wert**: Modell wurde teilweise in System-RAM ausgelagert -- Performance leidet
-- **Effizienz (t/W)**: Höher = besser. Zeigt wie effizient das Backend die GPU nutzt
-- **Prompt t/s >> Gen t/s**: Normal -- Prompt-Verarbeitung ist parallelisierbar, Generation ist sequenziell
+- **GPU-Busy high (>90%), MEM-Busy moderate**: GPU is fully utilized (compute-bound)
+- **GPU-Busy low, MEM-Busy high**: Memory bandwidth is the bottleneck (memory-bound)
+- **High GTT value**: Model was partially offloaded to system RAM -- performance suffers
+- **Efficiency (t/W)**: Higher = better. Shows how efficiently the backend uses the GPU
+- **Prompt t/s >> Gen t/s**: Normal -- prompt evaluation is parallelizable, generation is sequential
 
 ## Requirements
 

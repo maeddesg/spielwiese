@@ -4,24 +4,24 @@ function ollama_bench
     set model "qwen3-coder:30b"
     set card_path "/sys/class/drm/card1/device"
 
-    # Abhängigkeiten prüfen
+    # Check dependencies
     if not command -q jq
-        echo "Fehler: jq ist nicht installiert"
+        echo "Error: jq is not installed"
         return 1
     end
 
     if not command -q curl
-        echo "Fehler: curl ist nicht installiert"
+        echo "Error: curl is not installed"
         return 1
     end
 
-    # Prüfen ob Ollama läuft
+    # Check if Ollama is running
     if not curl -s http://localhost:11434/api/tags >/dev/null 2>&1
-        echo "Fehler: Ollama läuft nicht (Port 11434)"
+        echo "Error: Ollama is not running (port 11434)"
         return 1
     end
 
-    # Backend automatisch erkennen
+    # Auto-detect backend
     if pacman -Qq ollama-vulkan &>/dev/null
         set backend "vulkan"
     else if pacman -Qq ollama-rocm &>/dev/null
@@ -30,21 +30,21 @@ function ollama_bench
         set backend "cpu"
     end
 
-    # Ollama Version
+    # Ollama version
     set ollama_version (ollama --version | string replace "ollama version is " "")
 
     set csv_file "benchmark_$backend.csv"
 
-    # Speicher-Dateien ermitteln (früh, für Baseline)
+    # Memory files (early, for baseline)
     set vram_used_file "$card_path/mem_info_vram_used"
     set gtt_used_file "$card_path/mem_info_gtt_used"
 
-    # Modell stoppen für saubere VRAM-Ausgangslage
-    echo "Stoppe Modell $model für saubere Baseline..."
+    # Stop model for clean VRAM baseline
+    echo "Stopping model $model for clean baseline..."
     ollama stop "$model" 2>/dev/null
     sleep 2
 
-    # VRAM/GTT Baseline messen (ohne Modell = Firefox, Compositor, etc.)
+    # Measure VRAM/GTT baseline (without model = Firefox, compositor, etc.)
     if test -f "$vram_used_file"
         set baseline_vram_raw (cat "$vram_used_file")
         set baseline_vram_mb (math -s0 "$baseline_vram_raw / 1048576")
@@ -58,12 +58,12 @@ function ollama_bench
         set baseline_gtt_mb "N/A"
     end
 
-    # Modell neu laden
-    echo "Lade Modell $model..."
+    # Reload model
+    echo "Loading model $model..."
     curl -s -X POST http://localhost:11434/api/generate \
         -d "{\"model\": \"$model\", \"prompt\": \"hi\", \"stream\": false}" >/dev/null
 
-    # VRAM/GTT nach Laden messen
+    # Measure VRAM/GTT after loading
     if test -f "$vram_used_file"
         set loaded_vram_raw (cat "$vram_used_file")
         set loaded_vram_mb (math -s0 "$loaded_vram_raw / 1048576")
@@ -77,7 +77,7 @@ function ollama_bench
         set loaded_gtt_mb "N/A"
     end
 
-    # Delta berechnen (was das Modell tatsächlich belegt)
+    # Calculate delta (actual model footprint)
     if test "$baseline_vram_mb" != "N/A"; and test "$loaded_vram_mb" != "N/A"
         set delta_vram_mb (math -s0 "$loaded_vram_mb - $baseline_vram_mb")
     else
@@ -89,26 +89,26 @@ function ollama_bench
         set delta_gtt_mb "N/A"
     end
 
-    # Modell-Info holen (awk für korrekte Spalten-Trennung)
+    # Get model info
     set model_info (ollama ps 2>/dev/null | grep "$model")
     if test -n "$model_info"
         set model_size_num (echo "$model_info" | awk '{print $3}')
         set model_size_unit (echo "$model_info" | awk '{print $4}')
         set model_size "$model_size_num"_"$model_size_unit"
         set processor_raw (echo "$model_info" | awk '{print $5}')
-        # Prozente aufteilen (z.B. "23%/77%" -> "23% (RAM) / 77% (VRAM)")
+        # Split percentages (e.g. "23%/77%" -> "23% (RAM) / 77% (VRAM)")
         set cpu_pct (echo "$processor_raw" | string split "/" | head -n 1)
         set gpu_pct (echo "$processor_raw" | string split "/" | tail -n 1)
         set model_processor "$cpu_pct (RAM) / $gpu_pct (VRAM)"
-        # GPU-Prozent als Zahl für VRAM-Berechnung (z.B. "77%" -> 77)
+        # GPU percent as number for VRAM calculation (e.g. "77%" -> 77)
         set gpu_pct_num (echo "$gpu_pct" | string replace "%" "")
-        # Modellgröße in MB umrechnen
+        # Convert model size to MB
         if test "$model_size_unit" = "GB"
             set model_size_mb (math "$model_size_num * 1024")
         else
             set model_size_mb "$model_size_num"
         end
-        # VRAM des Modells berechnen (Modellgröße × GPU%)
+        # Calculate model VRAM (model size x GPU%)
         set model_vram_mb (math -s0 "$model_size_mb * $gpu_pct_num / 100")
     else
         set model_size "N/A"
@@ -116,18 +116,18 @@ function ollama_bench
         set model_vram_mb "N/A"
     end
 
-    # GPU-Clock-Datei ermitteln
+    # GPU clock file
     set sclk_file "$card_path/pp_dpm_sclk"
 
-    # GPU-Auslastungs-Dateien
+    # GPU utilization files
     set gpu_busy_file "$card_path/gpu_busy_percent"
     set mem_busy_file "$card_path/mem_busy_percent"
 
-    # Speicher-Dateien ermitteln (Total)
+    # Memory files (total)
     set vram_total_file "$card_path/mem_info_vram_total"
     set gtt_total_file "$card_path/mem_info_gtt_total"
 
-    # VRAM/GTT Total einmalig lesen
+    # Read VRAM/GTT total once
     if test -f "$vram_total_file"
         set vram_total_raw (cat "$vram_total_file")
         set vram_total_mb (math -s0 "$vram_total_raw / 1048576")
@@ -141,7 +141,7 @@ function ollama_bench
         set gtt_total_mb "N/A"
     end
 
-    # CSV-Header schreiben falls neu
+    # Write CSV header if new
     if not test -f "$csv_file"
         echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb,efficiency_tpw,vram_baseline_mb,gtt_baseline_mb,gpu_busy_pct,mem_busy_pct,warmup,prompt_tokens_per_sec" > "$csv_file"
     end
@@ -151,35 +151,35 @@ function ollama_bench
     echo "==============================================="
     echo "Ollama:  $ollama_version"
     echo "Backend: $backend"
-    echo "Modell:  $model"
-    echo "Größe:   $model_size"
+    echo "Model:   $model"
+    echo "Size:    $model_size"
     echo "Offload: $model_processor"
-    echo "VRAM:    $vram_total_mb MB total | Baseline: $baseline_vram_mb MB | Modell: +$delta_vram_mb MB | Geladen: $loaded_vram_mb MB"
-    echo "GTT:     $gtt_total_mb MB total | Baseline: $baseline_gtt_mb MB | Modell: +$delta_gtt_mb MB | Geladen: $loaded_gtt_mb MB"
+    echo "VRAM:    $vram_total_mb MB total | Baseline: $baseline_vram_mb MB | Model: +$delta_vram_mb MB | Loaded: $loaded_vram_mb MB"
+    echo "GTT:     $gtt_total_mb MB total | Baseline: $baseline_gtt_mb MB | Model: +$delta_gtt_mb MB | Loaded: $loaded_gtt_mb MB"
     echo "CSV:     $csv_file"
     echo "-------------------------------------------------------------------------------------------------------------------"
-    echo "Zeit     | Gen t/s | Prompt t/s | VRAM    | Power | Temp  | Clock   | GTT     | t/W   | GPU%  | MEM%  |"
+    echo "Time     | Gen t/s | Prompt t/s | VRAM    | Power | Temp  | Clock   | GTT     | t/W   | GPU%  | MEM%  |"
     echo "-------------------------------------------------------------------------------------------------------------------"
 
-    # Warmup-Zähler (erster Durchlauf = Warmup)
+    # Warmup counter (first run = warmup)
     set run_count 0
 
-    # Power-Datei ermitteln
+    # Power file
     set hwmon_files $card_path/hwmon/hwmon*/power1_average
     set power_file "$hwmon_files[1]"
 
-    # Temp-Datei ermitteln
+    # Temperature file
     set temp_files $card_path/hwmon/hwmon*/temp1_input
     set temp_file_path "$temp_files[1]"
 
-    # Sauberer Exit bei Ctrl+C
+    # Clean exit on Ctrl+C
     function _cleanup --on-signal INT --on-signal TERM
-        # Hintergrund-Sampler beenden falls aktiv
+        # Stop background sampler if active
         if set -q _power_sampler_pid
             kill $_power_sampler_pid 2>/dev/null
         end
         echo ""
-        echo "Benchmark beendet."
+        echo "Benchmark finished."
         exit 0
     end
 
@@ -191,16 +191,16 @@ function ollama_bench
             set is_warmup "false"
         end
 
-        # Temp-Datei für Power-Sampling
+        # Temp file for power sampling
         set power_samples_file (mktemp)
 
-        # Sample-Dateien
+        # Sample files
         set clock_samples_file (mktemp)
         set gtt_samples_file (mktemp)
         set gpu_busy_samples_file (mktemp)
         set mem_busy_samples_file (mktemp)
 
-        # Hintergrund-Sampler starten (alle 100ms)
+        # Background sampler (every 100ms)
         if test -f "$power_file"
             fish -c "
                 while true
@@ -223,11 +223,11 @@ function ollama_bench
             set _power_sampler_pid $last_pid
         end
 
-        # Inference ausführen
+        # Run inference
         set response (curl -s -X POST http://localhost:11434/api/generate \
-            -d "{\"model\": \"$model\", \"prompt\": \"Schreibe eine performante Funktion in C++, die einen Binärbaum invertiert.\", \"stream\": false}")
+            -d "{\"model\": \"$model\", \"prompt\": \"Write a performant C++ function that inverts a binary tree.\", \"stream\": false}")
 
-        # Power-Sampler stoppen
+        # Stop sampler
         if set -q _power_sampler_pid
             kill $_power_sampler_pid 2>/dev/null
             set -e _power_sampler_pid
@@ -239,23 +239,23 @@ function ollama_bench
         set prompt_eval_duration (echo "$response" | jq -r '.prompt_eval_duration // empty' 2>/dev/null)
 
         if test -n "$eval_count"; and test "$eval_count" != "null"; and test "$eval_count" != "0"
-            # Tokens/s
+            # Generation tokens/s
             set ts (math -s2 "$eval_count / ($eval_duration / 1000000000)")
 
             # TTFT in ms
             set ttft (math -s1 "$prompt_eval_duration / 1000000")
 
-            # Prompt-Verarbeitung t/s
+            # Prompt evaluation t/s
             if test -n "$prompt_eval_count"; and test "$prompt_eval_count" != "null"; and test "$prompt_eval_count" != "0"
                 set prompt_ts (math -s2 "$prompt_eval_count / ($prompt_eval_duration / 1000000000)")
             else
                 set prompt_ts "N/A"
             end
 
-            # VRAM (berechneter Modell-VRAM)
+            # VRAM (estimated model VRAM)
             set vram "$model_vram_mb"
 
-            # Power - Maximum aus Samples nehmen
+            # Power - peak from samples
             if test -f "$power_samples_file"; and test -s "$power_samples_file"
                 set power_max (sort -n "$power_samples_file" | tail -n 1)
                 set power (math -s1 "$power_max / 1000000")
@@ -263,7 +263,7 @@ function ollama_bench
                 set power "N/A"
             end
 
-            # Temperatur
+            # Temperature
             if test -f "$temp_file_path"
                 set temp_raw (cat "$temp_file_path")
                 set temp (math -s0 "$temp_raw / 1000")
@@ -271,14 +271,14 @@ function ollama_bench
                 set temp "N/A"
             end
 
-            # GPU-Clock - Maximum aus Samples
+            # GPU clock - peak from samples
             if test -f "$clock_samples_file"; and test -s "$clock_samples_file"
                 set gpu_clock (sort -n "$clock_samples_file" | tail -n 1)
             else
                 set gpu_clock "N/A"
             end
 
-            # VRAM tatsächlich belegt (Snapshot nach Inference)
+            # VRAM actual usage (snapshot after inference)
             if test -f "$vram_used_file"
                 set vram_used_raw (cat "$vram_used_file")
                 set vram_used_mb (math -s0 "$vram_used_raw / 1048576")
@@ -286,7 +286,7 @@ function ollama_bench
                 set vram_used_mb "N/A"
             end
 
-            # GTT - Maximum aus Samples (Spillover in System-RAM)
+            # GTT - peak from samples (system RAM spillover)
             if test -f "$gtt_samples_file"; and test -s "$gtt_samples_file"
                 set gtt_max (sort -n "$gtt_samples_file" | tail -n 1)
                 set gtt_used_mb (math -s0 "$gtt_max / 1048576")
@@ -294,44 +294,44 @@ function ollama_bench
                 set gtt_used_mb "N/A"
             end
 
-            # Effizienz: Tokens pro Watt (t/s / W)
+            # Efficiency: tokens per watt (t/s / W)
             if test "$power" != "N/A"; and test "$power" != "0"
                 set efficiency (math -s3 "$ts / $power")
             else
                 set efficiency "N/A"
             end
 
-            # GPU-Auslastung - Durchschnitt aus Samples
+            # GPU utilization - average from samples
             if test -f "$gpu_busy_samples_file"; and test -s "$gpu_busy_samples_file"
                 set gpu_busy_avg (awk '{s+=$1; n++} END {if(n>0) printf "%.0f", s/n}' "$gpu_busy_samples_file")
             else
                 set gpu_busy_avg "N/A"
             end
 
-            # Speicherbus-Auslastung - Durchschnitt aus Samples
+            # Memory bus utilization - average from samples
             if test -f "$mem_busy_samples_file"; and test -s "$mem_busy_samples_file"
                 set mem_busy_avg (awk '{s+=$1; n++} END {if(n>0) printf "%.0f", s/n}' "$mem_busy_samples_file")
             else
                 set mem_busy_avg "N/A"
             end
 
-            # Warmup-Label für Ausgabe
+            # Warmup label for output
             if test "$is_warmup" = "true"
                 set warmup_label " WARMUP"
             else
                 set warmup_label ""
             end
 
-            # Ausgabe
+            # Output
             echo (date +"%H:%M:%S")" | $ts | $prompt_ts | $vram_used_mb MB | $power W | $temp°C | $gpu_clock MHz | GTT $gtt_used_mb MB | $efficiency | $gpu_busy_avg% | $mem_busy_avg%$warmup_label"
 
-            # CSV speichern
+            # Save to CSV
             echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft","$gpu_clock","$vram_used_mb","$gtt_used_mb","$efficiency","$baseline_vram_mb","$baseline_gtt_mb","$gpu_busy_avg","$mem_busy_avg","$is_warmup","$prompt_ts" >> "$csv_file"
         else
             echo (date +"%H:%M:%S")" | API Busy..."
         end
 
-        # Temp-Dateien aufräumen
+        # Clean up temp files
         rm -f "$power_samples_file" "$clock_samples_file" "$gtt_samples_file" "$gpu_busy_samples_file" "$mem_busy_samples_file"
 
         sleep 1
