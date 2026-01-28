@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# Compares benchmark_vulkan.json and benchmark_rocm.json
+# Compares benchmark_vulkan.json, benchmark_rocm.json and benchmark_native.json
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║              Benchmark Comparison: Vulkan vs ROCm            ║"
+echo "║         Benchmark Comparison: Vulkan vs ROCm vs Native       ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 
-for f in benchmark_vulkan.json benchmark_rocm.json
+for f in benchmark_vulkan.json benchmark_rocm.json benchmark_native.json
     if test -f $f
         set backend (string replace -r 'benchmark_(.+)\.json' '$1' $f | string upper)
 
@@ -124,37 +124,56 @@ echo "────────────────────────�
 echo "(Warmup runs are excluded from comparison)"
 echo
 
-if test -f benchmark_vulkan.json; and test -f benchmark_rocm.json
-    # Collect all distinct num_ctx values across both files
-    set all_ctx (begin
-        jq -s -r '[.[] | .num_ctx // 0] | unique | .[]' benchmark_vulkan.json
-        jq -s -r '[.[] | .num_ctx // 0] | unique | .[]' benchmark_rocm.json
-    end | sort -n -u)
+# Only compare data with prompt_id="code_short" for fair comparison
+set prompt_filter 'select(.prompt_id == "code_short")'
 
-    for num_ctx in $all_ctx
-        if test "$num_ctx" = "0"
-            set ctx_filter 'select((.num_ctx // 0) == 0)'
-            set ctx_label "default"
-        else
-            set ctx_filter "select(.num_ctx == $num_ctx)"
-            set ctx_label "$num_ctx"
-        end
-
-        set vulkan_ts (jq -s -r "[.[] | $ctx_filter | select(.warmup != true) | .tokens_per_sec | numbers] | if length > 0 then (add / length | tostring) else \"0\" end" benchmark_vulkan.json)
-        set rocm_ts (jq -s -r "[.[] | $ctx_filter | select(.warmup != true) | .tokens_per_sec | numbers] | if length > 0 then (add / length | tostring) else \"0\" end" benchmark_rocm.json)
-
-        if test "$vulkan_ts" = "0"; or test "$rocm_ts" = "0"
-            echo "num_ctx=$ctx_label: Comparison not possible (data for both backends required)"
-        else
-            if test (echo "$vulkan_ts > $rocm_ts" | bc) -eq 1
-                set diff (echo "$vulkan_ts $rocm_ts" | awk '{printf "%.1f", (($1-$2)/$2)*100}')
-                echo "num_ctx=$ctx_label: Vulkan is $diff% faster than ROCm"
-            else
-                set diff (echo "$rocm_ts $vulkan_ts" | awk '{printf "%.1f", (($1-$2)/$2)*100}')
-                echo "num_ctx=$ctx_label: ROCm is $diff% faster than Vulkan"
-            end
+# Collect all distinct num_ctx values across all files (only code_short)
+set all_ctx (begin
+    for f in benchmark_vulkan.json benchmark_rocm.json benchmark_native.json
+        if test -f $f
+            jq -s -r "[.[] | $prompt_filter | .num_ctx // 0] | unique | .[]" $f
         end
     end
-else
-    echo "Comparison not possible (data for both backends required)"
+end | sort -n -u)
+
+# Helper function to compare two backends
+function compare_backends --argument-names b1_name b1_ts b2_name b2_ts ctx_label
+    if test "$b1_ts" = "0"; or test "$b2_ts" = "0"
+        return
+    end
+    if test (echo "$b1_ts > $b2_ts" | bc) -eq 1
+        set diff (echo "$b1_ts $b2_ts" | awk '{printf "%.1f", (($1-$2)/$2)*100}')
+        echo "num_ctx=$ctx_label: $b1_name is $diff% faster than $b2_name"
+    else
+        set diff (echo "$b2_ts $b1_ts" | awk '{printf "%.1f", (($1-$2)/$2)*100}')
+        echo "num_ctx=$ctx_label: $b2_name is $diff% faster than $b1_name"
+    end
+end
+
+echo "(Only prompt_id=code_short is compared)"
+echo
+
+for num_ctx in $all_ctx
+    set ctx_filter "select(.num_ctx == $num_ctx)"
+    set ctx_label "$num_ctx"
+
+    # Get tokens/sec for each backend (0 if no data) - filter by prompt_id=code_short
+    set vulkan_ts "0"
+    set rocm_ts "0"
+    set native_ts "0"
+
+    if test -f benchmark_vulkan.json
+        set vulkan_ts (jq -s -r "[.[] | $ctx_filter | $prompt_filter | select(.warmup != true) | .tokens_per_sec | numbers] | if length > 0 then (add / length | tostring) else \"0\" end" benchmark_vulkan.json)
+    end
+    if test -f benchmark_rocm.json
+        set rocm_ts (jq -s -r "[.[] | $ctx_filter | $prompt_filter | select(.warmup != true) | .tokens_per_sec | numbers] | if length > 0 then (add / length | tostring) else \"0\" end" benchmark_rocm.json)
+    end
+    if test -f benchmark_native.json
+        set native_ts (jq -s -r "[.[] | $ctx_filter | $prompt_filter | select(.warmup != true) | .tokens_per_sec | numbers] | if length > 0 then (add / length | tostring) else \"0\" end" benchmark_native.json)
+    end
+
+    # Compare all available pairs
+    compare_backends "Vulkan" $vulkan_ts "ROCm" $rocm_ts $ctx_label
+    compare_backends "Vulkan" $vulkan_ts "Native" $native_ts $ctx_label
+    compare_backends "ROCm" $rocm_ts "Native" $native_ts $ctx_label
 end
