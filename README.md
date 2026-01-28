@@ -6,7 +6,18 @@ Fish shell scripts for benchmarking Ollama with different GPU backends (ROCm, Vu
 
 ### ollama_bench.fish
 
-Continuous benchmark script for Ollama. Before each session the model is stopped and reloaded to ensure a clean VRAM state. A baseline measurement captures how much VRAM/GTT is already occupied by other processes (Firefox, compositor, etc.).
+Benchmark script that sweeps over multiple context sizes (`num_ctx`). For each context size the model is stopped and reloaded to ensure a clean KV cache allocation and accurate VRAM measurement. A baseline measurement captures how much VRAM/GTT is already occupied by other processes (Firefox, compositor, etc.).
+
+#### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `model` | `qwen3-coder:30b` | Ollama model to benchmark |
+| `context_sizes` | `2048 4096 8192 16384 32768` | Context lengths to sweep |
+| `runs_per_ctx` | `6` | Runs per context size (1 warmup + 5 measured) |
+| `card_path` | `/sys/class/drm/card1/device` | sysfs path for the GPU |
+
+#### Metrics
 
 Metrics sampled per inference run:
 
@@ -26,9 +37,11 @@ Metrics sampled per inference run:
 
 Power, clock, GTT, GPU-Busy and MEM-Busy are sampled every 100ms in the background.
 
-The first run after model reload is marked as warmup and excluded from averages in the comparison script.
+The first run after each model reload (per context size) is marked as warmup and excluded from averages in the comparison script.
 
 The backend (ROCm/Vulkan/CPU) is detected automatically via installed `pacman` packages. Results are saved to `benchmark_<backend>.json` in JSONL format (one JSON object per line).
+
+The script terminates after completing all context sizes -- no manual interruption needed.
 
 ```bash
 ./ollama_bench.fish
@@ -46,6 +59,7 @@ Each line in the output file is a JSON object with these fields:
   "model": "qwen3-coder:30b",
   "model_size": "17_GB",
   "gpu_offload": "23% (RAM) / 77% (VRAM)",
+  "num_ctx": 4096,
   "tokens_per_sec": 51.23,
   "vram_mb": 12345,
   "power_w": 65.3,
@@ -66,7 +80,7 @@ Each line in the output file is a JSON object with these fields:
 
 ### compare-benchmarks.fish
 
-Compares benchmark results from `benchmark_vulkan.json` and `benchmark_rocm.json`, showing averages for all metrics and the percentage speed difference. Warmup runs are excluded from all averages and TTFT is shown separately for warm and cold starts.
+Compares benchmark results from `benchmark_vulkan.json` and `benchmark_rocm.json`, grouped by `num_ctx`. Shows averages for all metrics per context size and the percentage speed difference. Warmup runs are excluded from all averages and TTFT is shown separately for warm and cold starts. Legacy data without `num_ctx` is grouped under "default".
 
 ```bash
 ./compare-benchmarks.fish
@@ -79,6 +93,7 @@ Compares benchmark results from `benchmark_vulkan.json` and `benchmark_rocm.json
 - **High GTT value**: Model was partially offloaded to system RAM -- performance suffers
 - **Efficiency (t/W)**: Higher = better. Shows how efficiently the backend uses the GPU
 - **Prompt t/s >> Gen t/s**: Normal -- prompt evaluation is parallelizable, generation is sequential
+- **Larger num_ctx**: Increases KV cache size, which increases VRAM usage and may affect performance
 
 ## Requirements
 
