@@ -1,40 +1,48 @@
 #!/usr/bin/env fish
-# Compares benchmark_vulkan.csv and benchmark_rocm.csv
+# Compares benchmark_vulkan.json and benchmark_rocm.json
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║              Benchmark Comparison: Vulkan vs ROCm            ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo
 
-for f in benchmark_vulkan.csv benchmark_rocm.csv
+for f in benchmark_vulkan.json benchmark_rocm.json
     if test -f $f
-        set backend (string replace -r 'benchmark_(.+)\.csv' '$1' $f | string upper)
+        set backend (string replace -r 'benchmark_(.+)\.json' '$1' $f | string upper)
 
         # Count warmup rows
-        set warmup_count (tail -n +2 $f | grep -v '^$' | awk -F',' '$20 == "true" {n++} END {printf "%d", n+0}')
+        set warmup_count (jq -s '[.[] | select(.warmup == true)] | length' $f)
 
-        # Stats from non-warmup rows only (column 20 != "true")
-        # Fallback: rows without column 20 are included (legacy data)
-        set stats (tail -n +2 $f | grep -v '^$' | awk -F',' '
-            $20 != "true" {
-                ts+=$7; vram+=$8; power+=$9; temp+=$10; ttft+=$11;
-                if ($12+0 > 0) { clk+=$12; clk_n++ }
-                if ($13+0 > 0) { vram_real+=$13; vram_real_n++ }
-                if ($14+0 > 0) { gtt+=$14; gtt_n++ }
-                if ($15+0 > 0) { eff+=$15; eff_n++ }
-                if ($16+0 > 0) { bl_vram+=$16; bl_n++ }
-                if ($17+0 > 0) { bl_gtt+=$17; bl_gtt_n++ }
-                if ($18+0 > 0) { gpu_b+=$18; gpu_b_n++ }
-                if ($19+0 > 0) { mem_b+=$19; mem_b_n++ }
-                if ($21+0 > 0) { pts+=$21; pts_n++ }
-                n++
-            }
-        END {
-            if (n>0) printf "%.2f|%.0f|%.1f|%.1f|%.1f|%d|%.0f|%.0f|%.0f|%.3f|%.0f|%.0f|%.0f|%.0f|%.2f", ts/n, vram/n, power/n, temp/n, ttft/n, n, (clk_n>0 ? clk/clk_n : 0), (vram_real_n>0 ? vram_real/vram_real_n : 0), (gtt_n>0 ? gtt/gtt_n : 0), (eff_n>0 ? eff/eff_n : (power/n>0 ? ts/n/(power/n) : 0)), (bl_n>0 ? bl_vram/bl_n : 0), (bl_gtt_n>0 ? bl_gtt/bl_gtt_n : 0), (gpu_b_n>0 ? gpu_b/gpu_b_n : 0), (mem_b_n>0 ? mem_b/mem_b_n : 0), (pts_n>0 ? pts/pts_n : 0)
-        }')
+        # Stats from non-warmup rows only
+        set stats (jq -s -r '
+            [.[] | select(.warmup != true)] |
+            if length == 0 then empty else
+            {
+                ts: ([.[].tokens_per_sec | numbers] | add / length),
+                vram: ([.[].vram_mb | numbers] | add / length),
+                power: ([.[].power_w | numbers] | add / length),
+                temp: ([.[].temp_c | numbers] | add / length),
+                ttft: ([.[].ttft_ms | numbers] | add / length),
+                count: length,
+                gpu_clock: (if ([.[].gpu_clock_mhz | numbers] | length) > 0 then ([.[].gpu_clock_mhz | numbers] | add / length) else 0 end),
+                vram_real: (if ([.[].vram_used_mb | numbers] | length) > 0 then ([.[].vram_used_mb | numbers] | add / length) else 0 end),
+                gtt: (if ([.[].gtt_used_mb | numbers] | length) > 0 then ([.[].gtt_used_mb | numbers] | add / length) else 0 end),
+                efficiency: (if ([.[].efficiency_tpw | numbers] | length) > 0 then ([.[].efficiency_tpw | numbers] | add / length) else 0 end),
+                bl_vram: (if ([.[].vram_baseline_mb | numbers] | length) > 0 then ([.[].vram_baseline_mb | numbers] | add / length) else 0 end),
+                bl_gtt: (if ([.[].gtt_baseline_mb | numbers] | length) > 0 then ([.[].gtt_baseline_mb | numbers] | add / length) else 0 end),
+                gpu_busy: (if ([.[].gpu_busy_pct | numbers] | length) > 0 then ([.[].gpu_busy_pct | numbers] | add / length) else 0 end),
+                mem_busy: (if ([.[].mem_busy_pct | numbers] | length) > 0 then ([.[].mem_busy_pct | numbers] | add / length) else 0 end),
+                prompt_ts: (if ([.[].prompt_tokens_per_sec | numbers] | length) > 0 then ([.[].prompt_tokens_per_sec | numbers] | add / length) else 0 end)
+            } |
+            "\(.ts * 100 | round / 100)|\(.vram | round)|\(.power * 10 | round / 10)|\(.temp * 10 | round / 10)|\(.ttft * 10 | round / 10)|\(.count)|\(.gpu_clock | round)|\(.vram_real | round)|\(.gtt | round)|\(.efficiency * 1000 | round / 1000)|\(.bl_vram | round)|\(.bl_gtt | round)|\(.gpu_busy | round)|\(.mem_busy | round)|\(.prompt_ts * 100 | round / 100)"
+            end
+        ' $f)
 
         # Calculate warmup TTFT separately
-        set warmup_ttft (tail -n +2 $f | grep -v '^$' | awk -F',' '$20 == "true" {ttft+=$11; n++} END {if(n>0) printf "%.1f", ttft/n; else printf "N/A"}')
+        set warmup_ttft (jq -s -r '
+            [.[] | select(.warmup == true) | .ttft_ms | numbers] |
+            if length > 0 then (add / length | . * 10 | round / 10 | tostring) else "N/A" end
+        ' $f)
 
         set ts (echo $stats | cut -d'|' -f1)
         set vram (echo $stats | cut -d'|' -f2)
@@ -88,8 +96,17 @@ for f in benchmark_vulkan.csv benchmark_rocm.csv
 end
 
 # Calculate comparison (excluding warmup)
-set vulkan_ts (tail -n +2 benchmark_vulkan.csv 2>/dev/null | grep -v '^$' | awk -F',' '$20 != "true" {ts+=$7; n++} END {if(n>0) printf "%.2f", ts/n; else print "0"}')
-set rocm_ts (tail -n +2 benchmark_rocm.csv 2>/dev/null | grep -v '^$' | awk -F',' '$20 != "true" {ts+=$7; n++} END {if(n>0) printf "%.2f", ts/n; else print "0"}')
+if test -f benchmark_vulkan.json
+    set vulkan_ts (jq -s -r '[.[] | select(.warmup != true) | .tokens_per_sec | numbers] | if length > 0 then (add / length | tostring) else "0" end' benchmark_vulkan.json)
+else
+    set vulkan_ts "0"
+end
+
+if test -f benchmark_rocm.json
+    set rocm_ts (jq -s -r '[.[] | select(.warmup != true) | .tokens_per_sec | numbers] | if length > 0 then (add / length | tostring) else "0" end' benchmark_rocm.json)
+else
+    set rocm_ts "0"
+end
 
 if test "$vulkan_ts" = "0"; or test "$rocm_ts" = "0"
     echo "─────────────────────────────────────────────────────────────────"

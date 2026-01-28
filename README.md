@@ -28,25 +28,45 @@ Power, clock, GTT, GPU-Busy and MEM-Busy are sampled every 100ms in the backgrou
 
 The first run after model reload is marked as warmup and excluded from averages in the comparison script.
 
-The backend (ROCm/Vulkan/CPU) is detected automatically via installed `pacman` packages. Results are saved to `benchmark_<backend>.csv`.
+The backend (ROCm/Vulkan/CPU) is detected automatically via installed `pacman` packages. Results are saved to `benchmark_<backend>.json` in JSONL format (one JSON object per line).
 
 ```bash
 ./ollama_bench.fish
 ```
 
-#### CSV Columns
+#### JSON Fields
 
-```
-timestamp, ollama_version, backend, model, model_size, gpu_offload,
-tokens_per_sec, vram_mb, power_w, temp_c, ttft_ms, gpu_clock_mhz,
-vram_used_mb, gtt_used_mb, efficiency_tpw, vram_baseline_mb,
-gtt_baseline_mb, gpu_busy_pct, mem_busy_pct, warmup,
-prompt_tokens_per_sec
+Each line in the output file is a JSON object with these fields:
+
+```json
+{
+  "timestamp": "2026-01-27T14:30:00+01:00",
+  "ollama_version": "0.9.x",
+  "backend": "vulkan",
+  "model": "qwen3-coder:30b",
+  "model_size": "17_GB",
+  "gpu_offload": "23% (RAM) / 77% (VRAM)",
+  "tokens_per_sec": 51.23,
+  "vram_mb": 12345,
+  "power_w": 65.3,
+  "temp_c": 72,
+  "ttft_ms": 123.4,
+  "gpu_clock_mhz": 2400,
+  "vram_used_mb": 5678,
+  "gtt_used_mb": 1234,
+  "efficiency_tpw": 0.789,
+  "vram_baseline_mb": 500,
+  "gtt_baseline_mb": 200,
+  "gpu_busy_pct": 95,
+  "mem_busy_pct": 30,
+  "warmup": false,
+  "prompt_tokens_per_sec": 45.67
+}
 ```
 
 ### compare-benchmarks.fish
 
-Compares benchmark results from Vulkan and ROCm, showing averages for all metrics and the percentage speed difference. Warmup runs are excluded from all averages and TTFT is shown separately for warm and cold starts.
+Compares benchmark results from `benchmark_vulkan.json` and `benchmark_rocm.json`, showing averages for all metrics and the percentage speed difference. Warmup runs are excluded from all averages and TTFT is shown separately for warm and cold starts.
 
 ```bash
 ./compare-benchmarks.fish

@@ -33,7 +33,7 @@ function ollama_bench
     # Ollama version
     set ollama_version (ollama --version | string replace "ollama version is " "")
 
-    set csv_file "benchmark_$backend.csv"
+    set json_file "benchmark_$backend.json"
 
     # Memory files (early, for baseline)
     set vram_used_file "$card_path/mem_info_vram_used"
@@ -141,9 +141,9 @@ function ollama_bench
         set gtt_total_mb "N/A"
     end
 
-    # Write CSV header if new
-    if not test -f "$csv_file"
-        echo "timestamp,ollama_version,backend,model,model_size,gpu_offload,tokens_per_sec,vram_mb,power_w,temp_c,ttft_ms,gpu_clock_mhz,vram_used_mb,gtt_used_mb,efficiency_tpw,vram_baseline_mb,gtt_baseline_mb,gpu_busy_pct,mem_busy_pct,warmup,prompt_tokens_per_sec" > "$csv_file"
+    # Create JSON file if new (empty file, JSONL format)
+    if not test -f "$json_file"
+        touch "$json_file"
     end
 
     echo "==============================================="
@@ -156,7 +156,7 @@ function ollama_bench
     echo "Offload: $model_processor"
     echo "VRAM:    $vram_total_mb MB total | Baseline: $baseline_vram_mb MB | Model: +$delta_vram_mb MB | Loaded: $loaded_vram_mb MB"
     echo "GTT:     $gtt_total_mb MB total | Baseline: $baseline_gtt_mb MB | Model: +$delta_gtt_mb MB | Loaded: $loaded_gtt_mb MB"
-    echo "CSV:     $csv_file"
+    echo "JSON:    $json_file"
     echo "-------------------------------------------------------------------------------------------------------------------"
     echo "Time     | Gen t/s | Prompt t/s | VRAM    | Power | Temp  | Clock   | GTT     | t/W   | GPU%  | MEM%  |"
     echo "-------------------------------------------------------------------------------------------------------------------"
@@ -325,8 +325,52 @@ function ollama_bench
             # Output
             echo (date +"%H:%M:%S")" | $ts | $prompt_ts | $vram_used_mb MB | $power W | $temp°C | $gpu_clock MHz | GTT $gtt_used_mb MB | $efficiency | $gpu_busy_avg% | $mem_busy_avg%$warmup_label"
 
-            # Save to CSV
-            echo (date -Iseconds),"$ollama_version","$backend","$model","$model_size","$model_processor","$ts","$vram","$power","$temp","$ttft","$gpu_clock","$vram_used_mb","$gtt_used_mb","$efficiency","$baseline_vram_mb","$baseline_gtt_mb","$gpu_busy_avg","$mem_busy_avg","$is_warmup","$prompt_ts" >> "$csv_file"
+            # Save to JSON (JSONL format)
+            jq -n -c \
+                --arg timestamp (date -Iseconds) \
+                --arg ollama_version "$ollama_version" \
+                --arg backend "$backend" \
+                --arg model "$model" \
+                --arg model_size "$model_size" \
+                --arg gpu_offload "$model_processor" \
+                --arg tokens_per_sec "$ts" \
+                --arg vram_mb "$vram" \
+                --arg power_w "$power" \
+                --arg temp_c "$temp" \
+                --arg ttft_ms "$ttft" \
+                --arg gpu_clock_mhz "$gpu_clock" \
+                --arg vram_used_mb "$vram_used_mb" \
+                --arg gtt_used_mb "$gtt_used_mb" \
+                --arg efficiency_tpw "$efficiency" \
+                --arg vram_baseline_mb "$baseline_vram_mb" \
+                --arg gtt_baseline_mb "$baseline_gtt_mb" \
+                --arg gpu_busy_pct "$gpu_busy_avg" \
+                --arg mem_busy_pct "$mem_busy_avg" \
+                --arg warmup "$is_warmup" \
+                --arg prompt_tokens_per_sec "$prompt_ts" \
+                '{
+                    timestamp: $timestamp,
+                    ollama_version: $ollama_version,
+                    backend: $backend,
+                    model: $model,
+                    model_size: $model_size,
+                    gpu_offload: $gpu_offload,
+                    tokens_per_sec: ($tokens_per_sec | tonumber? // $tokens_per_sec),
+                    vram_mb: ($vram_mb | tonumber? // $vram_mb),
+                    power_w: ($power_w | tonumber? // $power_w),
+                    temp_c: ($temp_c | tonumber? // $temp_c),
+                    ttft_ms: ($ttft_ms | tonumber? // $ttft_ms),
+                    gpu_clock_mhz: ($gpu_clock_mhz | tonumber? // $gpu_clock_mhz),
+                    vram_used_mb: ($vram_used_mb | tonumber? // $vram_used_mb),
+                    gtt_used_mb: ($gtt_used_mb | tonumber? // $gtt_used_mb),
+                    efficiency_tpw: ($efficiency_tpw | tonumber? // $efficiency_tpw),
+                    vram_baseline_mb: ($vram_baseline_mb | tonumber? // $vram_baseline_mb),
+                    gtt_baseline_mb: ($gtt_baseline_mb | tonumber? // $gtt_baseline_mb),
+                    gpu_busy_pct: ($gpu_busy_pct | tonumber? // $gpu_busy_pct),
+                    mem_busy_pct: ($mem_busy_pct | tonumber? // $mem_busy_pct),
+                    warmup: ($warmup == "true"),
+                    prompt_tokens_per_sec: ($prompt_tokens_per_sec | tonumber? // $prompt_tokens_per_sec)
+                }' >> "$json_file"
         else
             echo (date +"%H:%M:%S")" | API Busy..."
         end
