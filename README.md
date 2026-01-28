@@ -63,7 +63,7 @@ Power, clock, GTT, GPU-Busy and MEM-Busy are sampled every 100ms in the backgrou
 
 The first run after each model reload (per context size) is marked as warmup and excluded from averages in the comparison script.
 
-The backend (ROCm/Vulkan/CPU) is detected automatically via installed `pacman` packages. Results are saved to `benchmark_<backend>.json` in JSONL format (one JSON object per line).
+The backend (Vulkan/ROCm/CUDA/native/CPU) is detected automatically via installed `pacman` packages (`ollama-vulkan`, `ollama-rocm`, `ollama-cuda`, `ollama`). Results are saved to `benchmark_<backend>.json` in JSONL format (one JSON object per line).
 
 The script terminates after completing all context sizes -- no manual interruption needed.
 
@@ -123,6 +123,6 @@ Compares benchmark results from `benchmark_vulkan.json` and `benchmark_rocm.json
 ## Requirements
 
 - Fish Shell
-- Ollama (`ollama-rocm` or `ollama-vulkan` via pacman)
+- Ollama (`ollama-rocm`, `ollama-vulkan`, `ollama-cuda`, or `ollama` via pacman)
 - jq, curl
 - AMD GPU (RDNA/CDNA) with `amdgpu` driver and sysfs support

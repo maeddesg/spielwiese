@@ -138,6 +138,10 @@ function ollama_bench
         set backend "vulkan"
     else if pacman -Qq ollama-rocm &>/dev/null
         set backend "rocm"
+    else if pacman -Qq ollama-cuda &>/dev/null
+        set backend "cuda"
+    else if pacman -Qq ollama &>/dev/null
+        set backend "native"
     else
         set backend "cpu"
     end
