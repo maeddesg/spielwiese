@@ -77,7 +77,13 @@ for f in benchmark_vulkan.json benchmark_rocm.json
             set mem_busy (echo $stats | cut -d'|' -f14)
             set prompt_ts (echo $stats | cut -d'|' -f15)
 
-            echo "=== $backend | num_ctx=$ctx_label ($count runs, $warmup_count warmup skipped) ==="
+            # Get prompt_id for this context group (informational)
+            set prompt_id_val (jq -s -r "[.[] | $ctx_filter | .prompt_id // empty] | unique | join(\", \")" $f)
+            if test -z "$prompt_id_val"
+                set prompt_id_val "N/A"
+            end
+
+            echo "=== $backend | num_ctx=$ctx_label | prompt=$prompt_id_val ($count runs, $warmup_count warmup skipped) ==="
             echo "  Gen t/s:    $ts t/s (generation)"
             if test "$prompt_ts" != "0.00"; and test "$prompt_ts" != "0"
                 echo "  Prompt t/s: $prompt_ts t/s (prompt evaluation)"

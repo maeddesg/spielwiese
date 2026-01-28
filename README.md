@@ -6,7 +6,7 @@ Fish shell scripts for benchmarking Ollama with different GPU backends (ROCm, Vu
 
 ### ollama_bench.fish
 
-Benchmark script that sweeps over multiple context sizes (`num_ctx`). For each context size the model is stopped and reloaded to ensure a clean KV cache allocation and accurate VRAM measurement. A baseline measurement captures how much VRAM/GTT is already occupied by other processes (Firefox, compositor, etc.).
+Benchmark script that sweeps over multiple context sizes (`num_ctx`). Before the sweep starts, an interactive menu lets you choose a prompt category and length. For each context size the model is stopped and reloaded to ensure a clean KV cache allocation and accurate VRAM measurement. A baseline measurement captures how much VRAM/GTT is already occupied by other processes (Firefox, compositor, etc.).
 
 #### Configuration
 
@@ -16,6 +16,30 @@ Benchmark script that sweeps over multiple context sizes (`num_ctx`). For each c
 | `context_sizes` | `2048 4096 8192 16384 32768` | Context lengths to sweep |
 | `runs_per_ctx` | `6` | Runs per context size (1 warmup + 5 measured) |
 | `card_path` | `/sys/class/drm/card1/device` | sysfs path for the GPU |
+
+#### Prompt Selection
+
+On startup, an interactive menu presents prompt categories and lengths:
+
+1. **Code Generation** -- Short / Medium / Long code tasks
+2. **Prose / Text** -- Short / Medium / Long text tasks
+3. **Reasoning / Analysis** -- Short / Medium / Long reasoning tasks
+4. **Custom Prompt** -- Enter a free-form prompt
+
+All runs in one benchmark session use the same prompt, keeping results comparable across context sizes. The selected `prompt_id` is stored in each JSON result line.
+
+| ID | Category | Name | Description |
+|----|----------|------|-------------|
+| `code_short` | Code Generation | Prime Check | Python prime check function |
+| `code_medium` | Code Generation | LRU Cache | Thread-safe C++ LRU cache class |
+| `code_long` | Code Generation | REST API | Go REST API with auth & middleware |
+| `prose_short` | Prose / Text | Mutex Explanation | One-paragraph mutex explanation |
+| `prose_medium` | Prose / Text | TCP vs UDP | Protocol comparison |
+| `prose_long` | Prose / Text | GPU Architecture | Technical blog post on GPU evolution |
+| `reason_short` | Reasoning | Complexity | Binary search complexity |
+| `reason_medium` | Reasoning | Debug Code | Off-by-one bug analysis |
+| `reason_long` | Reasoning | System Design | Distributed message queue design |
+| `custom` | Custom | Custom | User-provided prompt |
 
 #### Metrics
 
@@ -74,7 +98,8 @@ Each line in the output file is a JSON object with these fields:
   "gpu_busy_pct": 95,
   "mem_busy_pct": 30,
   "warmup": false,
-  "prompt_tokens_per_sec": 45.67
+  "prompt_tokens_per_sec": 45.67,
+  "prompt_id": "code_medium"
 }
 ```
 

@@ -6,6 +6,116 @@ function ollama_bench
     set context_sizes 2048 4096 8192 16384 32768
     set runs_per_ctx 6
 
+    # Prompt catalog: IDs, names, and texts (parallel lists, indexed 1-9)
+    set prompt_ids \
+        code_short    code_medium    code_long \
+        prose_short   prose_medium   prose_long \
+        reason_short  reason_medium  reason_long
+    set prompt_names \
+        "Prime Check" "LRU Cache"    "REST API" \
+        "Mutex Explanation" "TCP vs UDP" "GPU Architecture" \
+        "Complexity"  "Debug Code"   "System Design"
+    set prompt_texts \
+        "Write a Python function that checks if a number is prime." \
+        "Write a C++ class implementing a thread-safe LRU cache with get, put, and delete operations. Include proper mutex locking and comments." \
+        "Write a REST API in Go with endpoints for user authentication (register, login, logout), JWT token handling, password hashing with bcrypt, and rate limiting middleware. Include error handling, input validation, and code comments." \
+        "Explain what a mutex is in one paragraph." \
+        "Compare and contrast TCP and UDP protocols. Cover reliability, speed, use cases, and header differences." \
+        "Write a detailed technical blog post about the evolution of GPU architectures from CUDA to modern compute shaders, covering parallel processing concepts, memory hierarchies, and real-world applications in machine learning and graphics." \
+        "What is the time complexity of binary search and why?" \
+        "Debug this code and explain the issue: for(int i=0; i<=arr.length; i++) sum += arr[i];" \
+        "Design a distributed message queue system. Describe the architecture, how you would handle failover, message persistence, ordering guarantees, and horizontal scaling. Compare tradeoffs between at-least-once and exactly-once delivery."
+
+    # Interactive prompt selection menu
+    while true
+        echo "╔══════════════════════════════════════╗"
+        echo "║      Ollama Benchmark - Prompt       ║"
+        echo "╚══════════════════════════════════════╝"
+        echo ""
+        echo "Choose a category:"
+        echo ""
+        echo "  1) Code Generation"
+        echo "  2) Prose / Text"
+        echo "  3) Reasoning / Analysis"
+        echo "  4) Custom Prompt"
+        echo "  0) Exit"
+        echo ""
+        read -P "Selection: " category_choice
+
+        switch $category_choice
+            case 0
+                echo "Exiting."
+                return 0
+            case 1
+                set cat_label "Code Generation"
+                set cat_offset 0
+            case 2
+                set cat_label "Prose / Text"
+                set cat_offset 3
+            case 3
+                set cat_label "Reasoning / Analysis"
+                set cat_offset 6
+            case 4
+                read -P "Enter your custom prompt: " custom_input
+                if test -z "$custom_input"
+                    echo "Empty prompt, try again."
+                    echo ""
+                    continue
+                end
+                set prompt_id "custom"
+                set prompt_name "Custom"
+                set prompt_text "$custom_input"
+                break
+            case '*'
+                echo "Invalid selection, try again."
+                echo ""
+                continue
+        end
+
+        # Level 2: prompt length sub-menu
+        set idx1 (math $cat_offset + 1)
+        set idx2 (math $cat_offset + 2)
+        set idx3 (math $cat_offset + 3)
+        echo ""
+        echo "╔══════════════════════════════════════╗"
+        echo "║  $cat_label Prompts"
+        echo "╚══════════════════════════════════════╝"
+        echo ""
+        echo "Choose a prompt:"
+        echo ""
+        echo "  1) Short  - $prompt_names[$idx1]"
+        echo "  2) Medium - $prompt_names[$idx2]"
+        echo "  3) Long   - $prompt_names[$idx3]"
+        echo "  0) Back"
+        echo ""
+        read -P "Selection: " length_choice
+
+        switch $length_choice
+            case 0
+                echo ""
+                continue
+            case 1
+                set prompt_id $prompt_ids[$idx1]
+                set prompt_name $prompt_names[$idx1]
+                set prompt_text $prompt_texts[$idx1]
+                break
+            case 2
+                set prompt_id $prompt_ids[$idx2]
+                set prompt_name $prompt_names[$idx2]
+                set prompt_text $prompt_texts[$idx2]
+                break
+            case 3
+                set prompt_id $prompt_ids[$idx3]
+                set prompt_name $prompt_names[$idx3]
+                set prompt_text $prompt_texts[$idx3]
+                break
+            case '*'
+                echo "Invalid selection, try again."
+                echo ""
+                continue
+        end
+    end
+
     # Check dependencies
     if not command -q jq
         echo "Error: jq is not installed"
@@ -106,6 +216,7 @@ function ollama_bench
     echo "Model:    $model"
     echo "Contexts: $context_sizes"
     echo "Runs:     $runs_per_ctx per context size (1 warmup + "(math $runs_per_ctx - 1)" measured)"
+    echo "Prompt:   $prompt_name ($prompt_id)"
     echo "JSON:     $json_file"
     echo "==============================================="
 
@@ -233,8 +344,9 @@ function ollama_bench
             end
 
             # Run inference with num_ctx
+            set prompt_escaped (echo "$prompt_text" | string replace -a '"' '\\"')
             set response (curl -s -X POST http://localhost:11434/api/generate \
-                -d "{\"model\": \"$model\", \"prompt\": \"Write a performant C++ function that inverts a binary tree.\", \"stream\": false, \"options\": {\"num_ctx\": $num_ctx}}")
+                -d "{\"model\": \"$model\", \"prompt\": \"$prompt_escaped\", \"stream\": false, \"options\": {\"num_ctx\": $num_ctx}}")
 
             # Stop sampler
             if set -q _power_sampler_pid
@@ -358,6 +470,7 @@ function ollama_bench
                     --arg mem_busy_pct "$mem_busy_avg" \
                     --arg warmup "$is_warmup" \
                     --arg prompt_tokens_per_sec "$prompt_ts" \
+                    --arg prompt_id "$prompt_id" \
                     '{
                         timestamp: $timestamp,
                         ollama_version: $ollama_version,
@@ -380,7 +493,8 @@ function ollama_bench
                         gpu_busy_pct: ($gpu_busy_pct | tonumber? // $gpu_busy_pct),
                         mem_busy_pct: ($mem_busy_pct | tonumber? // $mem_busy_pct),
                         warmup: ($warmup == "true"),
-                        prompt_tokens_per_sec: ($prompt_tokens_per_sec | tonumber? // $prompt_tokens_per_sec)
+                        prompt_tokens_per_sec: ($prompt_tokens_per_sec | tonumber? // $prompt_tokens_per_sec),
+                        prompt_id: $prompt_id
                     }' >> "$json_file"
             else
                 echo (date +"%H:%M:%S")" | API Busy..."
