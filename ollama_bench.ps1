@@ -195,7 +195,7 @@ function Ollama-Bench {
         # Try nvidia-smi first (most complete)
         if ($hasNvidiaSmi) {
             try {
-                $smiOutput = & nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu,utilization.memory,temperature.gpu,power.draw,clocks.gr -format=csv,noheader,nounits 2>$null
+                $smiOutput = & nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu,utilization.memory,temperature.gpu,power.draw,clocks.gr '--format=csv,noheader,nounits' 2>$null
                 if ($smiOutput) {
                     $parts = $smiOutput.Split(",") | ForEach-Object { $_.Trim() }
                     if ($parts.Count -ge 7) {
@@ -372,7 +372,7 @@ function Ollama-Bench {
 
                     if ($hasNvidiaSmi) {
                         try {
-                            $out = & nvidia-smi --query-gpu=memory.used,utilization.gpu,utilization.memory,temperature.gpu,power.draw,clocks.gr -format=csv,noheader,nounits 2>$null
+                            $out = & nvidia-smi --query-gpu=memory.used,utilization.gpu,utilization.memory,temperature.gpu,power.draw,clocks.gr '--format=csv,noheader,nounits' 2>$null
                             if ($out) {
                                 $p = $out.Split(",") | ForEach-Object { $_.Trim() }
                                 $s.vram_used_mb  = [int]$p[0]
